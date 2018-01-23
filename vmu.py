@@ -81,12 +81,9 @@ def canonical_src_string(sources):
     m = re.search(r'(^\w+:[./\w-]+)\s*;\s*(.*)', result)
     if m:
         branch, result = m.groups()
-    result = re.sub(r'osg-minefield', 'Minefield', result)
-    result = re.sub(r'osg-development', 'Development', result)
-    result = re.sub(r'osg-testing', 'Testing', result)
-    result = re.sub(r'osg-prerelease', 'Prerelease', result)
-    result = re.sub(r'osg-upcoming-testing', 'Upcoming Testing', result)
-    result = re.sub(r'osg-upcoming', 'Upcoming', result)
+    def osgsub(m):
+        return ' '.join(map(str.capitalize, filter(None, m.groups())))
+    result = re.sub(r'osg(?:-(upcoming))?(?:-(minefield|development|testing|prerelease))', osgsub, result)
     result = re.sub(r'osg', 'Release', result) # Must come after other repos
     result = re.sub(r';', '', result)
     result = re.sub(r'/', ' ', result)
