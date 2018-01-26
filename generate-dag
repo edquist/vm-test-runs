@@ -32,30 +32,27 @@ def write_osg_test_configuration(serial, combo, directory, nightly=False):
     contents = base_config.read() + '\n' # ensure newline in case user forgets it
     base_config.close()
 
-    sources_parts = re.split(r'\s*;\s*', sources)
-    if len(sources_parts) == 3:
-        contents += 'testsource = %s\n' % (sources_parts[0])
-        _, release_series, repositories = sources_parts
-    else:
-        release_series, repositories = sources_parts
-    repo_parts = re.split(r'\s*>\s*', repositories)
+    sources_parts = vmu.parse_sources_spec(sources)
+    testsrc, base_series, base_repos, update_series, update_repos = sources_parts
+
+    def not_osg_release(repo): return repo != 'osg'
+
+    if testsrc is not None:
+        contents += 'testsource = %s\n' % testsrc
     # Remove osg production from any part of the extra repos string
-    extrarepos = re.sub(r'osg\s*,\s*', '', repo_parts[0])
-    extrarepos = re.sub(r'[,\s]*osg(?!-)', '', extrarepos)
+    base_repos = filter(not_osg_release, base_repos)
     # Don't add any extra repos if there aren't any
-    if extrarepos:
-        contents += 'extrarepos = %s\n' % (extrarepos)
-    if len(repo_parts) > 1:
-        update_parts = re.split(r'\s*/\s*', repo_parts[1])
-        if len(update_parts) == 1:
-            contents += 'updaterepos = %s\n' % (update_parts[0])
-        else:
-            contents += 'updaterelease = %s\n' % (update_parts[0])
-            if update_parts[1] != 'osg':
-                contents += 'updaterepos = %s\n' % (update_parts[1])
+    if base_repos:
+        contents += 'extrarepos = %s\n' % ', '.join(base_repos)
+
+    if update_repos:
+        update_repos = filter(not_osg_release, update_repos)
+        if update_series:
+            contents += 'updaterelease = %s\n' % update_series
+        contents += 'updaterepos = %s\n' % ', '.join(update_repos)
 
     contents += 'packages = %s\n' % (', '.join(package_set.packages))
-    contents += 'series = %s\n' % (release_series)
+    contents += 'series = %s\n' % base_series
     contents += 'sources = %s\n' % (sources)
     contents += 'selinux = %s\n' % package_set.selinux
     contents += 'nightly = %s\n' % nightly

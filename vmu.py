@@ -60,6 +60,28 @@ def package_mapping(flat_params):
     lists of packages as keys and their labels as values'''
     return dict((', '.join(x.packages), x.label) for x in flat_params['package_sets'])
 
+def parse_sources_spec(sources):
+    # [<Github account>:<osg-test branch>;] <OSG ver>; <REPO 1, REPO 2...REPO N> [> <Update OSG ver>/<Update REPO 1, REPO 2...REPO N>]
+    testsrc_pat = r'^\s*(?:(\w+:[./\w-]+)\s*;\s*)?'
+    release_pat = r'(\d+\.\d+)\s*;\s*'
+#   repo_pat_0  = r'@?\w[\w-]*'
+#   repo_pat    = r'(?:{0}|\[\s*{0}\s*:\s*{0}\s*(?:,\s*{0}\s*)*\])'.format(repo0_pat)
+#   repos_1_pat = r'({0}(?:\s*,\s*{0})*)\s*'.format(repo_pat)
+#   repos_2_pat = r'(?:>\s*(?:(\d+\.\d+)\s*/\s*)?{0})?$'.format(repos_1_pat)
+
+    repos_1_pat = r'(\w[\w-]*(?:\s*,\s*\w[\w-]*)*)\s*'
+    repos_2_pat = r'(?:>\s*(?:(\d+\.\d+)\s*/\s*)?%s)?$' % repos_1_pat
+    sources_pat = ''.join([testsrc_pat, release_pat, repos_1_pat, repos_2_pat])
+    m = re.search(sources_pat, sources)
+    if m is None:
+        # malformed
+        return
+    testsrc, base_series, base_repos, update_series, update_repos = m.groups()
+    base_repos = re.split(r'\s*,\s*', base_repos)
+    if update_repos is not None:
+        update_repos = re.split(r'\s*,\s*', update_repos)
+    return testsrc, base_series, base_repos, update_series, update_repos
+
 def canonical_os_string(os_release):
     '''Make the OS release from test parameters or /etc/redhat/release human readable'''
     # Handle OS string from /etc/redhat-release
@@ -74,27 +96,29 @@ def canonical_os_string(os_release):
     result = re.sub(r'_(\d)_.*', r' \1', result)
     return result
 
+def _osgmap(repo):
+    if repo == 'osg':
+        return 'Release'
+    elif repo.startswith('osg-'):
+        return ' '.join(map(str.capitalize, repo.split('-')[1:]))
+    else:
+        return repo
+
+def _pretty_repos(repos):
+    return ' + '.join(map(_osgmap, repos))
+
 def canonical_src_string(sources):
     '''Make the repo source string human readable'''
-    result = re.sub(r'\s*>\s*', ' -> ', sources)
-    branch = None
-    m = re.search(r'(^\w+:[./\w-]+)\s*;\s*(.*)', result)
-    if m:
-        branch, result = m.groups()
-    result = re.sub(r'osg-minefield', 'Minefield', result)
-    result = re.sub(r'osg-development', 'Development', result)
-    result = re.sub(r'osg-testing', 'Testing', result)
-    result = re.sub(r'osg-prerelease', 'Prerelease', result)
-    result = re.sub(r'osg-upcoming-testing', 'Upcoming Testing', result)
-    result = re.sub(r'osg-upcoming', 'Upcoming', result)
-    result = re.sub(r'osg', 'Release', result) # Must come after other repos
-    result = re.sub(r';', '', result)
-    result = re.sub(r'/', ' ', result)
-    result = re.sub(r',', ' + ', result)
-    result = re.sub(r'^(\d+\.\d+)(.*-> )(?!\d)', '\\1\\2\\1 ', result) # Duplicate release series, when needed
-    if branch:
-        result += " (%s)" % branch
-    return result.strip()
+    sources_parts = parse_sources_spec(sources)
+    testsrc, base_series, base_repos, update_series, update_repos = sources_parts
+    result = "%s %s" % (base_series, _pretty_repos(base_repos))
+    if update_repos:
+        if update_series is None:
+            update_series = base_series
+        result += " -> %s %s" % (update_series, _pretty_repos(update_repos))
+    if testsrc:
+        result += " (%s)" % testsrc
+    return result
 
 class ParamError(Exception):
     """Exception for errors in parameter files"""
